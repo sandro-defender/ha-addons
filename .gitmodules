@@ -10,3 +10,11 @@
 	path = HomeAssistantEditor
 	url = https://github.com/saihgupr/HomeAssistantEditor.git
 	branch = main
+[submodule "ha-mcp"]
+	path = ha-mcp
+	url = https://github.com/sandro-defender/ha-mcp.git
+	branch = main
+[submodule "Github-Sync"]
+	path = Github-Sync
+	url = https://github.com/sandro-defender/Github-Sync.git
+	branch = main
