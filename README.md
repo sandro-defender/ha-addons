@@ -22,6 +22,10 @@ Or manually:
 4. Click **Add**.
 5. Find the add-ons in the store and install them!
 
+## Updates
+
+Each add-on is included as a git submodule pinned to an upstream commit, and Home Assistant only ever sees the pinned version — so the pins are kept current automatically: [`.github/workflows/sync-addons.yml`](.github/workflows/sync-addons.yml) runs hourly and fast-forwards any add-on whose upstream `version:` changed. New releases then appear in Home Assistant within a few hours (or immediately via **Add-on Store → ⋮ → Check for updates**). See [`docs/UPDATES.md`](docs/UPDATES.md) for how this works, the alternatives, and troubleshooting.
+
 ## Looking for beta versions?
 
 Check out the [beta add-ons repository](https://github.com/saihgupr/ha-addons-beta) for experimental features.
