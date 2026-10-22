@@ -1,0 +1,80 @@
+name: Sync add-ons from upstream
+
+# Home Assistant Supervisor only ever reads the submodule commits pinned in
+# this repository (it runs `git submodule update` WITHOUT --remote, and it
+# skips re-reading the store when this repo's HEAD did not move). Upstream
+# releases therefore stay invisible in the add-on store until the pin is
+# bumped here. This workflow does that automatically for every add-on.
+# Full explanation: docs/UPDATES.md
+
+on:
+  schedule:
+    # Hourly. Supervisor re-checks custom repositories every 3 hours
+    # (RUN_RELOAD_APPS = 10800s) and whenever the user presses
+    # "Check for updates", so hourly here is more than fast enough.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Move pins even when the add-on version did not change / is a pre-release"
+        type: boolean
+        default: false
+      only:
+        description: "Only sync this submodule (e.g. ha-mcp). Empty = all"
+        type: string
+        default: ""
+  # Instant trigger for the upstream repos we own: they can POST a
+  # repository_dispatch event ("addon-updated") on release/push so we do not
+  # have to wait for the hourly run. Setup is documented in docs/UPDATES.md.
+  repository_dispatch:
+    types: [addon-updated]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-addons
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Bump submodule pins
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fast-forward submodule pins
+        id: sync
+        # Keep good bumps even if one upstream fails; the failure is
+        # re-raised after committing (last step) so it stays visible.
+        continue-on-error: true
+        env:
+          FORCE: ${{ inputs.force || 'false' }}
+          ONLY: ${{ inputs.only || github.event.client_payload.addon || '' }}
+        run: |
+          set -uo pipefail
+          args=()
+          [ "$FORCE" = "true" ] && args+=(--force)
+          [ -n "$ONLY" ] && args+=(--only "$ONLY")
+          python3 .github/scripts/sync_addons.py "${args[@]}"
+
+      - name: Commit and push new pins
+        if: steps.sync.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "addon-sync[bot]"
+          git config user.email "addon-sync@users.noreply.github.com"
+          while IFS= read -r path; do
+            [ -n "$path" ] && git add -- "$path"
+          done < "$RUNNER_TEMP/bumped-paths.txt"
+          git commit -F "$RUNNER_TEMP/commit-message.txt"
+          # Something may have landed on the branch while we worked.
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
+
+      - name: Surface sync errors
+        if: steps.sync.outcome == 'failure'
+        run: |
+          echo "::error::One or more upstreams could not be synced (see table above)."
+          exit 1
